@@ -21,11 +21,11 @@ class Frame:
         length: _t.Optional[int] = None,
         data: _t.Optional[_t.Union[str, bytes, PacketLike]] = None,
         checksum: _t.Optional[int] = None,
+        validate: bool = True,
     ):
+        self._packet = None
         self.header = header
         self.type = type
-        if header != b"\x00\xff\x2a":
-            raise ValueError()
         if length is None:
             self._set_data_bytes(data)
         else:
@@ -33,18 +33,24 @@ class Frame:
                 self.data_bytes = bytes([b"\x00" for i in range(length)])
             else:
                 self._set_data_bytes(data)
-                if len(self.data_bytes) != length:
-                    raise ValueError(
-                        f"Provided Length ({length}) does not match "
-                        f"length of provided data ({len(data)})"
-                    )
+        self.length = length
+        if validate:
+            self.validate(checksum=checksum)
         self.length = len(self.data_bytes)
+
+    def validate(self, checksum=None):
+        if self.header != b"\x00\xff\x2a":
+            raise ValueError("Invalid Header")
+        if len(self.data_bytes) != self.length:
+            raise ValueError(
+                f"Provided Length ({self.length}) does not match "
+                f"length of data ({len(self.data_bytes)})"
+            )
         if checksum is not None and self.generate_checksum() != checksum:
             raise ValueError(
                 "Provided checksume does not match generated checksum "
                 f"(0x{checksum:04x}!=0x{self.generate_checksum():04x})"
             )
-        self._packet = None
 
     @property
     def packet(self):
@@ -67,7 +73,12 @@ class Frame:
             raise ValueError(f"Unable to set Frame.data_bytes from {data!r}")
 
     @classmethod
-    def from_bytes(cls, data: bytes, validate_checksum: bool = False):
+    def from_bytes(
+        cls,
+        data: bytes,
+        validate_checksum: bool = False,
+        validate: bool = True,
+    ):
         header = data[:3]
         frame_type = data[3]
         frame_length = int.from_bytes(data[4:6], "big")
@@ -82,6 +93,7 @@ class Frame:
             packet_length,
             packet_data,
             checksum if validate_checksum else None,
+            validate=validate,
         )
 
 
