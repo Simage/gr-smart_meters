@@ -1,10 +1,12 @@
 from .packets import Packet, PacketLike, DataPacket, RoutingPacket
 import typing as _t
+from binascii import crc_hqx as crc16
 
 
 class Frame:
     frame_types = {}
     packet_class = Packet
+    _initial_crc = None
 
     @classmethod
     def register(cls, frame_type):
@@ -13,6 +15,10 @@ class Frame:
             return frame_class
 
         return inner
+
+    @classmethod
+    def set_initial_checksum(cls, initial_checksum):
+        cls._initial_crc = initial_checksum
 
     def __init__(
         self,
@@ -59,7 +65,7 @@ class Frame:
         return self._packet
 
     def generate_checksum(self):
-        return 0
+        return crc16(self.data_bytes, self._initial_crc)
 
     def _set_data_bytes(self, data: _t.Union[str, bytes, PacketLike]):
         if isinstance(data, Packet):
