@@ -1,2 +1,2 @@
-from .frame import Frame
+from .frame import Frame,ValidationError
 from .packets import Packet

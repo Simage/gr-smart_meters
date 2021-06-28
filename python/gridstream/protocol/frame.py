@@ -2,6 +2,8 @@ from .packets import Packet, PacketLike, DataPacket, RoutingPacket
 import typing as _t
 from binascii import crc_hqx as crc16
 
+class FrameError(Exception):pass
+class ValidationError(FrameError):pass
 
 class Frame:
     frame_types = {}
@@ -46,17 +48,19 @@ class Frame:
 
     def validate(self, checksum=None):
         if self.header != b"\x00\xff\x2a":
-            raise ValueError("Invalid Header")
+            raise ValidationError("Invalid Header")
         if len(self.data_bytes) != self.length:
-            raise ValueError(
+            raise ValidationError(
                 f"Provided Length ({self.length}) does not match "
                 f"length of data ({len(self.data_bytes)})"
             )
-        if checksum is not None and self.generate_checksum() != checksum:
-            raise ValueError(
-                "Provided checksume does not match generated checksum "
-                f"(0x{checksum:04x}!=0x{self.generate_checksum():04x})"
-            )
+        if checksum is not None:
+            ck_sum = self.generate_checksum()
+            if ck_sum != checksum:
+                raise ValidationError(
+                    "Provided checksum does not match generated checksum "
+                    f"(0x{checksum:04x}!=0x{ck_sum:04x})"
+                )
 
     @property
     def packet(self):
@@ -76,13 +80,13 @@ class Frame:
         elif isinstance(data, bytes):
             self.data_bytes = data
         else:
-            raise ValueError(f"Unable to set Frame.data_bytes from {data!r}")
+            raise FrameError(f"Unable to set Frame.data_bytes from {data!r}")
 
     @classmethod
     def from_bytes(
         cls,
         data: bytes,
-        validate_checksum: bool = False,
+        validate_checksum: bool = True,
         validate: bool = True,
     ):
         header = data[:3]
@@ -90,7 +94,9 @@ class Frame:
         frame_length = int.from_bytes(data[4:6], "big")
         packet_length = frame_length - 2
         packet_data = data[6 : packet_length + 6]
-        checksum = data[frame_length + 4 : frame_length + 6]
+        checksum = int.from_bytes(
+            data[frame_length + 4 : frame_length + 6], "big"
+        )
         if frame_type in cls.frame_types:
             cls = cls.frame_types[frame_type]
         return cls(
